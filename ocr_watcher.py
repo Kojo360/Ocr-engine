@@ -317,10 +317,12 @@ def start_watcher():
     obs.join()
 
 # === FastAPI App ===
-from fastapi import FastAPI, Query, UploadFile, File, HTTPException
+from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 import uvicorn
+import urllib.parse
+import mimetypes
 
 # Import aiofiles conditionally
 try:
@@ -394,6 +396,89 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"File upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+# --- Compatibility API expected by the Java backend ---
+@app.post("/api/files/upload")
+async def api_files_upload(file: UploadFile = File(...), authorization: str | None = Header(default=None)):
+    """Endpoint used by backend: POST /api/files/upload (multipart form, field name 'file')
+    This wraps the existing /upload handler and accepts an optional Authorization header.
+    """
+    if authorization:
+        logger.debug(f"Incoming API upload with Authorization header present (len={len(authorization)}).")
+    return await upload_file(file)
+
+
+@app.get("/api/files/list")
+def api_files_list(authorization: str | None = Header(default=None)):
+    """Return a simple JSON array of filenames. The backend expects a String[] by default.
+    It returns files from fully_indexed and partially_indexed folders.
+    """
+    if authorization:
+        logger.debug("List called with Authorization header present.")
+    results = []
+    for folder in [Config.FULLY_INDEXED_DIR, Config.PARTIAL_INDEXED_DIR]:
+        try:
+            for fname in os.listdir(folder):
+                # Only include files (skip directories)
+                fpath = os.path.join(folder, fname)
+                if os.path.isfile(fpath):
+                    results.append(fname)
+        except FileNotFoundError:
+            logger.debug(f"Directory not found while listing: {folder}")
+    # Return unique, sorted list
+    unique_sorted = sorted(list(dict.fromkeys(results)))
+    return JSONResponse(content=unique_sorted)
+
+
+@app.get("/api/files/{filename}")
+def api_files_download(filename: str, authorization: str | None = Header(default=None)):
+    """Download/serve a file by filename. The filename is URL-encoded by the caller; we will unquote it.
+    Searches fully_indexed then partially_indexed.
+    """
+    if authorization:
+        logger.debug("Download called with Authorization header present.")
+    try:
+        safe_name = urllib.parse.unquote(filename)
+    except Exception:
+        safe_name = filename
+
+    # Look in fully then partial
+    candidates = [os.path.join(Config.FULLY_INDEXED_DIR, safe_name), os.path.join(Config.PARTIAL_INDEXED_DIR, safe_name)]
+    found = None
+    for p in candidates:
+        if os.path.exists(p) and os.path.isfile(p):
+            found = p
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail="file not found")
+
+    # Guess mime type
+    mtype, _ = mimetypes.guess_type(found)
+    media_type = mtype or "application/octet-stream"
+    # Use FileResponse which sets appropriate headers and streams file
+    return FileResponse(found, media_type=media_type, filename=os.path.basename(found))
+
+
+@app.get("/api/files/{filename}/metadata")
+def api_files_metadata(filename: str, authorization: str | None = Header(default=None)):
+    """Return simple metadata for a file (filename, size, status: fully/partial).
+    """
+    try:
+        safe_name = urllib.parse.unquote(filename)
+    except Exception:
+        safe_name = filename
+
+    for folder, status in [(Config.FULLY_INDEXED_DIR, "fully_indexed"), (Config.PARTIAL_INDEXED_DIR, "partially_indexed")]:
+        p = os.path.join(folder, safe_name)
+        if os.path.exists(p) and os.path.isfile(p):
+            return JSONResponse(content={
+                "filename": safe_name,
+                "status": status,
+                "size": os.path.getsize(p)
+            })
+    raise HTTPException(status_code=404, detail="file not found")
 
 @app.post("/trigger-ocr")
 async def trigger_ocr():
