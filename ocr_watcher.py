@@ -8,8 +8,6 @@ from pdf2image import convert_from_path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import threading
-import numpy as np
-import cv2
 import logging
 from pathlib import Path
 from config import Config
@@ -20,7 +18,7 @@ logging.basicConfig(
     level=getattr(logging, Config.LOG_LEVEL),
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Config.LOG_FILE),
+        logging.FileHandler(Config.LOG_FILE) if hasattr(Config, 'LOG_FILE') and Config.LOG_FILE else logging.StreamHandler(),
         logging.StreamHandler()
     ]
 )
@@ -83,13 +81,11 @@ def parse_fields(text, img_path=None):
     blacklist.update([normalize(x) for x in [
         "Branch", "Account", "Name", "Surname", "Other", "Print", "Institution", "Organization", "Organisation", "No", "Number", "Holder", "CSD", "ID", "Client", "Details", "Purpose", "Period", "Address", "Tel", "E-Mail", "PHOTO", "Reference", "Date", "Relationship", "Employer", "Spouse", "Failed", "Partial", "Indexed", "Fully", "Of", "The", "And", "Or", "As", "It", "Is", "Are", "Was", "Be", "On", "In", "At", "To", "For", "By", "With", "From", "This", "That", "These", "Those", "A", "An", "PDF", "JPG", "PNG", "Doc", "File", "Scan", "Image", "Document", "Page", "Test", "Sample", "Unknown", "Unnamed", "Blank", "Empty", "None", "Null", "Untitled", "Failed", "Partial", "Indexed", "Fully", "Of", "The", "And", "Or", "As", "It", "Is", "Are", "Was", "Be", "On", "In", "At", "To", "For", "By", "With", "From", "This", "That", "These", "Those", "A", "An"]])
 
-    # If image path is provided, use color info to prefer blue/ink values
-    color_data = None
+    # If image path is provided, use simplified color analysis (no numpy for memory efficiency)
     if img_path:
         try:
             img = Image.open(img_path).convert("RGB")
-            arr = np.array(img)
-            color_data = arr
+            # Skip heavy numpy operations for memory efficiency in cloud deployment
             ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
         except Exception as e:
             logger.warning(f"Could not analyze color data for {img_path}: {e}")
@@ -325,7 +321,12 @@ from fastapi import FastAPI, Query, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
-import aiofiles
+
+# Import aiofiles conditionally
+try:
+    import aiofiles
+except ImportError:
+    logger.warning("aiofiles not available, using synchronous file operations")
 
 app = FastAPI(
     title="OCR Watcher Service",
@@ -366,10 +367,20 @@ async def upload_file(file: UploadFile = File(...)):
                 file_path = os.path.join(Config.SCAN_DIR, new_filename)
                 counter += 1
         
-        # Save file asynchronously
-        async with aiofiles.open(file_path, 'wb') as f:
-            content = await file.read()
-            await f.write(content)
+        # Save file (async if aiofiles available, otherwise sync)
+        try:
+            if 'aiofiles' in globals():
+                async with aiofiles.open(file_path, 'wb') as f:
+                    content = await file.read()
+                    await f.write(content)
+            else:
+                # Fallback to synchronous file operations
+                content = await file.read()
+                with open(file_path, 'wb') as f:
+                    f.write(content)
+        except Exception as e:
+            logger.error(f"File save failed: {e}")
+            raise HTTPException(status_code=500, detail=f"File save failed: {str(e)}")
         
         logger.info(f"File uploaded successfully: {file_path}")
         

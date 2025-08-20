@@ -1,0 +1,23 @@
+# Optimized requirements for DigitalOcean App Platform deployment
+# Reduced dependencies for better memory usage
+
+# Core FastAPI and web framework
+fastapi==0.116.1
+uvicorn==0.35.0
+python-multipart
+
+# OCR and document processing (essential only)
+pytesseract==0.3.13
+pdf2image==1.17.0
+pillow==11.3.0
+
+# File system monitoring
+watchdog==6.0.0
+
+# Essential utilities
+aiofiles
+requests==2.32.4
+
+# Remove heavy dependencies for cloud deployment
+# numpy==1.26.4  # Optional - only if needed for advanced image processing
+# opencv-python==4.9.0.80  # Optional - only if needed for advanced image processing
