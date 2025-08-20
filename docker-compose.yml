@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+version: "3.8"
+
+services:
+  ocr_watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocr_watcher
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Africa/Lagos
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./incoming-scan:/incoming-scan
+      - ./fully_indexed:/fully_indexed
+      - ./partially_indexed:/partially_indexed
+      - ./failed:/failed
+      - ./debug:/debug
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  db:
+    image: mysql:8.0
+    container_name: merbanhub_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: merbanhub
+      MYSQL_USER: merban
+      MYSQL_PASSWORD: merban123
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - merbanhub_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  merbanhub_db_data:
+    driver: local
