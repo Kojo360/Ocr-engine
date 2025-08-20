@@ -1,0 +1,9 @@
+# Ultra-minimal requirements for DigitalOcean App Platform
+# This version removes all heavy dependencies
+
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+python-multipart==0.0.6
+pytesseract==0.3.13
+pillow==11.3.0
+requests==2.32.4

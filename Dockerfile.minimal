@@ -1,0 +1,35 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (minimal)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first (for better caching)
+COPY requirements.minimal.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.minimal.txt
+
+# Copy application
+COPY minimal_ocr.py .
+
+# Create non-root user for security
+RUN useradd -m -u 1000 ocruser && chown -R ocruser:ocruser /app
+USER ocruser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run application
+CMD ["python", "minimal_ocr.py"]

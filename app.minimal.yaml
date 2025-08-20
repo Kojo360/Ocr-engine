@@ -1,0 +1,33 @@
+name: ocr-engine-minimal
+services:
+- name: ocr-minimal
+  source_dir: /
+  github:
+    repo: Kojo360/Ocr-engine
+    branch: main
+    deploy_on_push: true
+  build_command: |
+    apt-get update
+    apt-get install -y tesseract-ocr --no-install-recommends
+    pip install --no-cache-dir -r requirements.minimal.txt
+  run_command: python minimal_ocr.py
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8000
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 30
+    period_seconds: 60
+    timeout_seconds: 10
+    success_threshold: 1
+    failure_threshold: 3
+  envs:
+  - key: HOST
+    value: "0.0.0.0"
+  - key: PORT
+    value: "8000"
+  - key: TESSERACT_CMD
+    value: "/usr/bin/tesseract"
+  - key: PYTHONUNBUFFERED
+    value: "1"
