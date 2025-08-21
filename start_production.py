@@ -55,7 +55,9 @@ def start_application():
     try:
         # Import after ensuring dependencies are ready
         from ocr_watcher import main
-        logger.info("Starting OCR Watcher Service...")
+        port = os.getenv('PORT', '8000')
+        host = os.getenv('HOST', '0.0.0.0')
+        logger.info(f"Starting OCR Watcher Service on {host}:{port}...")
         main()
     except ImportError as e:
         logger.error(f"Failed to import OCR modules: {e}")

@@ -29,8 +29,11 @@ COPY . .
 # Make sure all Python files are executable
 RUN chmod +x *.py
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=5 CMD curl -f http://localhost:8000/health || exit 1
+# Health check (respects PORT env, falls back to 8000)
+HEALTHCHECK --interval=30s --timeout=10s --retries=5 CMD sh -c "curl -fsS http://localhost:${PORT:-8000}/health || exit 1"
 
-# Use smart startup that detects available files
-CMD ["python", "smart_startup.py"]
+# Expose default port (App Platform sets PORT env at runtime)
+EXPOSE 8000
+
+# Start production server (binds to HOST/PORT from env)
+CMD ["python", "start_production.py"]
