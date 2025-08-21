@@ -1,3 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+aiofiles>=23.2
+python-multipart>=0.0.9
 # Optimized requirements for DigitalOcean App Platform deployment
 # Reduced dependencies for better memory usage
 

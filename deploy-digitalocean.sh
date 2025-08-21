@@ -62,16 +62,16 @@ services:
   github:
     repo: Kojo360/Ocr-engine
     branch: main
-  run_command: python ocr_watcher.py
+    run_command: python start_production.py
   environment_slug: python
   instance_count: 1
   instance_size_slug: basic-xxs
-  http_port: 8000
+    http_port: 8080
   envs:
   - key: HOST
     value: "0.0.0.0"
-  - key: PORT
-    value: "8080"
+    - key: PORT
+        value: "8080"
   - key: TESSERACT_CMD
     value: "/usr/bin/tesseract"
   - key: POPPLER_PATH
