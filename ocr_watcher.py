@@ -409,6 +409,29 @@ async def api_files_upload(file: UploadFile = File(...), authorization: str | No
     return await upload_file(file)
 
 
+@app.post("/api/files/upload")
+async def upload_file(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
+    original_name = file.filename or "uploaded_file"
+    dest_path = _safe_path_join(Config.SCAN_DIR, original_name)
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    try:
+        if aiofiles:
+            async with aiofiles.open(dest_path, "wb") as out:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    await out.write(chunk)
+        else:
+            with open(dest_path, "wb") as out:
+                out.write(await file.read())
+    finally:
+        await file.close()
+
+    logger.info(f"Uploaded file saved to {dest_path}")
+    return {"status": "uploaded", "filename": file.filename}
+
+
 @app.get("/api/files/list")
 def api_files_list(authorization: str | None = Header(default=None)):
     """Return a simple JSON array of filenames. The backend expects a String[] by default.
@@ -561,6 +584,23 @@ def get_stats():
         logger.error(f"Directory not found: {e}")
         stats["error"] = str(e)
     return stats
+@app.get("/_routes")
+def list_routes():
+    """Diagnostics: list all registered routes (paths & methods) to verify deployed version."""
+    routes = []
+    for r in app.router.routes:
+        path = getattr(r, "path", None)
+        if not path:
+            continue
+        methods = sorted(list(getattr(r, "methods", []))) if getattr(r, "methods", None) else []
+        routes.append({
+            "path": path,
+            "name": getattr(r, "name", None),
+            "methods": methods
+        })
+    routes.sort(key=lambda x: x["path"])
+    return {"count": len(routes), "routes": routes}
+
 
 def main():
     """Main application entry point"""
