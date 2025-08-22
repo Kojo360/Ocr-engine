@@ -14,6 +14,7 @@ from typing import Optional
 import sys
 import io
 from config import Config
+import urllib.parse
 
 # Configure logging
 Config.ensure_directories()
@@ -61,6 +62,33 @@ def safe_move_file(src, dest, max_retries=None, delay=None):
             time.sleep(delay)
     logger.warning(f"Failed to move {src} to {dest} after {max_retries} attempts.")
     return False
+
+
+# === Safe path join to prevent directory traversal ===
+def _safe_path_join(base_dir: str, filename: str) -> str:
+    """Join base_dir and filename safely.
+    - URL-decodes filename
+    - strips any path components and unsafe chars
+    - normalizes the final path and ensures it stays inside base_dir
+    """
+    try:
+        name = urllib.parse.unquote(filename or "")
+    except Exception:
+        name = filename or ""
+
+    # Strip any directory components and remove unsafe chars
+    name = os.path.basename(name)
+    name = re.sub(r'[\\/:*?"<>|]', '', name)
+
+    base_norm = os.path.normpath(base_dir)
+    candidate = os.path.normpath(os.path.join(base_norm, name))
+
+    # Ensure candidate path is inside base_dir
+    if not candidate.startswith(base_norm):
+        # fallback to putting file directly in base_dir using basename
+        candidate = os.path.join(base_norm, os.path.basename(name))
+
+    return candidate
 
 # === OCR & Parsing ===
 def extract_text(path):
