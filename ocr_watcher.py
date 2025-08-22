@@ -11,18 +11,33 @@ import threading
 import logging
 from pathlib import Path
 from typing import Optional
+import sys
+import io
 from config import Config
 
 # Configure logging
 Config.ensure_directories()
-logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL),
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(Config.LOG_FILE) if hasattr(Config, 'LOG_FILE') and Config.LOG_FILE else logging.StreamHandler(),
-        logging.StreamHandler()
-    ]
-)
+# Build safe handlers that use UTF-8 encoding to avoid UnicodeEncodeError on Windows consoles
+log_level = getattr(logging, Config.LOG_LEVEL)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handlers = []
+if hasattr(Config, 'LOG_FILE') and Config.LOG_FILE:
+    fh = logging.FileHandler(Config.LOG_FILE, encoding='utf-8')
+    fh.setFormatter(formatter)
+    handlers.append(fh)
+# Stream handler that wraps stdout with a UTF-8 text wrapper and replaces unencodable chars
+stream = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sh = logging.StreamHandler(stream)
+sh.setFormatter(formatter)
+handlers.append(sh)
+
+# Apply handlers to root logger (avoid duplicate handlers on reload)
+root_logger = logging.getLogger()
+root_logger.handlers.clear()
+root_logger.setLevel(log_level)
+for h in handlers:
+    root_logger.addHandler(h)
+
 logger = logging.getLogger(__name__)
 
 # Configure OCR tools
@@ -329,7 +344,8 @@ import mimetypes
 try:
     import aiofiles
 except ImportError:
-    logger.warning("aiofiles not available, using synchronous file operations")
+    # Not critical; use synchronous file ops. Downgrade to INFO to reduce alarm in logs.
+    logger.info("aiofiles not available, using synchronous file operations")
 
 app = FastAPI(
     title="OCR Watcher Service",
@@ -612,7 +628,8 @@ def main():
     watcher_thread.start()
     
     # Start FastAPI server
-    uvicorn.run(app, host=Config.HOST, port=Config.PORT)
+    # Disable Uvicorn access_log to avoid noisy access log lines for frequent healthchecks
+    uvicorn.run(app, host=Config.HOST, port=Config.PORT, access_log=False)
 
 if __name__ == "__main__":
     main()
