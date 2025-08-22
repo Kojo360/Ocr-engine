@@ -91,7 +91,8 @@ async def legacy_upload(file: UploadFile = File(...)):
 
 @app.post("/api/files/upload")
 async def upload_file(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
-    dest_path = _safe_path_join(Config.SCAN_DIR, file.filename)
+    original_name = file.filename or "uploaded_file"
+    dest_path = _safe_path_join(Config.SCAN_DIR, original_name)
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     try:
         if aiofiles:
@@ -190,10 +191,27 @@ def stats():
         "failed": len(_list_files_in(Config.FAILED_DIR)),
     }
 
+@app.get("/_routes")
+def list_routes():
+    """Diagnostics: list all registered routes (paths & methods) to verify deployed version."""
+    routes = []
+    for r in app.router.routes:
+        path = getattr(r, "path", None)
+        if not path:
+            continue
+        methods = sorted(list(getattr(r, "methods", []))) if getattr(r, "methods", None) else []
+        routes.append({
+            "path": path,
+            "name": getattr(r, "name", None),
+            "methods": methods
+        })
+    routes.sort(key=lambda x: x["path"])
+    return {"count": len(routes), "routes": routes}
+
 
 def main():
     import uvicorn
-    logger.info(f"Starting uvicorn on {Config.HOST}:{Config.PORT}")
+    logger.info(f"Starting uvicorn on {Config.HOST}:{Config.PORT} with {len(app.router.routes)} registered routes")
     uvicorn.run("ocr_watcher:app", host=Config.HOST, port=Config.PORT, log_level="info")
 
 
