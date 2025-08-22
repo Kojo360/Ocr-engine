@@ -10,6 +10,7 @@ from watchdog.events import FileSystemEventHandler
 import threading
 import logging
 from pathlib import Path
+from typing import Optional
 from config import Config
 
 # Configure logging
